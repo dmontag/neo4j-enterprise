@@ -26,7 +26,6 @@ import static just.testing.WriteSomeStuff.RANDOM;
 
 import javax.ws.rs.core.MediaType;
 
-import org.neo4j.server.rest.domain.JsonHelper;
 import org.neo4j.server.rest.web.PropertyValueException;
 
 import com.sun.jersey.api.client.ClientResponse;
@@ -48,16 +47,7 @@ public class ReadSomeStuff
         ClientResponse response = CLIENT.resource( from + "/paths" ).accept( MediaType.APPLICATION_JSON_TYPE )
                 .entity( json, MediaType.APPLICATION_JSON_TYPE ).post( ClientResponse.class );
         String entity = response.getEntity( String.class );
-        int length = 0;
-        if ( entity.startsWith( "[" ) )
-        {
-            length = JsonHelper.jsonToList( json ).size();
-        }
-        else
-        {
-            length = 1;
-        }
-        System.out.println( "Found " + length + " paths between " + from + " and " + to );
+        System.out.println( "Did shortest paths between " + from + " and " + to );
         response.close();
     }
     
