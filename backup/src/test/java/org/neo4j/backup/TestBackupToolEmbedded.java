@@ -47,7 +47,7 @@ public class TestBackupToolEmbedded
     public static final String PATH = "target/var/db";
     public static final String BACKUP_PATH = "target/var/backup-db";
     private GraphDatabaseService db;
-    
+
     @Before
     public void before() throws Exception
     {
@@ -55,7 +55,7 @@ public class TestBackupToolEmbedded
         FileUtils.deleteDirectory( new File( PATH ) );
         FileUtils.deleteDirectory( new File( BACKUP_PATH ) );
     }
-    
+
     public static DbRepresentation createSomeData( GraphDatabaseService db )
     {
         Transaction tx = db.beginTx();
@@ -66,14 +66,14 @@ public class TestBackupToolEmbedded
         tx.finish();
         return DbRepresentation.of( db );
     }
-    
+
     @After
     public void after()
     {
         if ( osIsWindows() ) return;
         db.shutdown();
     }
-    
+
     @Test
     public void makeSureBackupCannotBePerformedWithInvalidArgs() throws Exception
     {
@@ -106,7 +106,7 @@ public class TestBackupToolEmbedded
                 runBackupToolFromOtherJvmToGetExitCode( "-full", "-from",
                         "foo:/localhost", "-to", "some-dir" ) );
     }
-    
+
     @Test
     public void makeSureBackupCanBePerformedWithDefaultPort() throws Exception
     {
@@ -115,14 +115,14 @@ public class TestBackupToolEmbedded
         assertEquals(
                 0,
                 runBackupToolFromOtherJvmToGetExitCode( "-full", "-from",
-                        BackupTool.DEFAULT_SCHEME + "://localhost", "-to",
+                        OnlineBackup.DEFAULT_SCHEME + "://localhost", "-to",
                         BACKUP_PATH ) );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( BACKUP_PATH ) );
         createSomeData( db );
         assertEquals(
                 0,
                 runBackupToolFromOtherJvmToGetExitCode( "-incremental",
-                        "-from", BackupTool.DEFAULT_SCHEME + "://localhost",
+                        "-from", OnlineBackup.DEFAULT_SCHEME + "://localhost",
                         "-to", BACKUP_PATH ) );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( BACKUP_PATH ) );
     }
@@ -136,24 +136,24 @@ public class TestBackupToolEmbedded
         assertEquals(
                 1,
                 runBackupToolFromOtherJvmToGetExitCode( "-full", "-from",
-                        BackupTool.DEFAULT_SCHEME + "://localhost", "-to",
+                        OnlineBackup.DEFAULT_SCHEME + "://localhost", "-to",
                         BACKUP_PATH ) );
         assertEquals(
                 0,
                 runBackupToolFromOtherJvmToGetExitCode( "-full", "-from",
-                        BackupTool.DEFAULT_SCHEME + "://localhost:" + port,
+                        OnlineBackup.DEFAULT_SCHEME + "://localhost:" + port,
                         "-to", BACKUP_PATH ) );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( BACKUP_PATH ) );
         createSomeData( db );
         assertEquals(
                 0,
                 runBackupToolFromOtherJvmToGetExitCode( "-incremental",
-                        "-from", BackupTool.DEFAULT_SCHEME + "://localhost:"
+                        "-from", OnlineBackup.DEFAULT_SCHEME + "://localhost:"
                                  + port, "-to",
                         BACKUP_PATH ) );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( BACKUP_PATH ) );
     }
-    
+
     private void startDb( String backupConfigValue )
     {
         if ( backupConfigValue == null )
@@ -166,17 +166,17 @@ public class TestBackupToolEmbedded
         }
         createSomeData( db );
     }
-    
+
     public static int runBackupToolFromOtherJvmToGetExitCode( String... args )
             throws Exception
     {
         List<String> allArgs = new ArrayList<String>( Arrays.asList( "java", "-cp", System.getProperty( "java.class.path" ), BackupTool.class.getName() ) );
         allArgs.addAll( Arrays.asList( args ) );
-        
+
         Process p = Runtime.getRuntime().exec( allArgs.toArray( new String[allArgs.size()] ));
         List<Thread> threads = new LinkedList<Thread>();
         launchStreamConsumers(threads, p);
-        
+
         int toReturn = p.waitFor();
         for (Thread t : threads)
             t.join();

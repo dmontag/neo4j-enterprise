@@ -19,13 +19,8 @@
  */
 package org.neo4j.backup;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.NoSuchElementException;
-
 import org.neo4j.com.ComException;
 import org.neo4j.helpers.Args;
-import org.neo4j.helpers.Service;
 
 public class BackupTool
 {
@@ -33,7 +28,7 @@ public class BackupTool
     private static final String FROM = "from";
     private static final String INCREMENTAL = "incremental";
     private static final String FULL = "full";
-    public static final String DEFAULT_SCHEME = "single";
+
 
     public static void main( String[] args )
     {
@@ -44,43 +39,8 @@ public class BackupTool
         boolean full = arguments.has( FULL );
         String from = arguments.get( FROM, null );
         String to = arguments.get( TO, null );
-        URI backupURI = null;
-        try
-        {
-            backupURI = new URI( from );
-        }
-        catch ( URISyntaxException e )
-        {
-            System.out.println( "Please properly specify a location to backup as a valid URI in the form <scheme>://<host>[:port], where scheme is the target database's running mode, eg ha" );
-            exitAbnormally();
-        }
-        String module = backupURI.getScheme();
 
-        /*
-         * So, the scheme is considered to be the module name and an attempt at
-         * loading the service is made.
-         */
-        BackupExtensionService service = null;
-        if ( module != null && !DEFAULT_SCHEME.equals( module ) )
-        {
-            try
-            {
-                service = Service.load( BackupExtensionService.class, module );
-            }
-            catch ( NoSuchElementException e )
-            {
-                System.out.println( String.format(
-                        "%s was specified as a backup module but it was not found. Please make sure that the implementing service is on the classpath.",
-                        module ) );
-                exitAbnormally();
-            }
-        }
-        if ( service != null )
-        { // If in here, it means a module was loaded. Use it and substitute the
-          // passed URI
-            backupURI = service.resolve( backupURI );
-        }
-        doBackup( full, backupURI, to );
+        doBackup( full, from, to );
     }
 
     private static void checkArguments( Args arguments )
@@ -108,7 +68,7 @@ public class BackupTool
     }
 
     private static void doBackup( boolean trueForFullFalseForIncremental,
-            URI from, String to )
+            String from, String to )
     {
         OnlineBackup backup = newOnlineBackup( from );
         try
@@ -142,13 +102,8 @@ public class BackupTool
         return "-" + name;
     }
 
-    private static OnlineBackup newOnlineBackup( URI from )
+    private static OnlineBackup newOnlineBackup( String from )
     {
-        String host = from.getHost();
-        int port = from.getPort();
-        if ( port == -1 )
-            return OnlineBackup.from( host );
-        else
-            return OnlineBackup.from( host, port );
+        return OnlineBackup.from( from );
     }
 }

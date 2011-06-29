@@ -40,6 +40,7 @@ import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.neo4j.backup.OnlineBackup;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.kernel.HighlyAvailableGraphDatabase;
 import org.neo4j.test.DbRepresentation;
@@ -50,7 +51,7 @@ public class TestBackupToolHa
     private LocalhostZooKeeperCluster zk;
     private List<GraphDatabaseService> instances;
     private DbRepresentation representation;
-    
+
     @Before
     public void before() throws Exception
     {
@@ -71,11 +72,11 @@ public class TestBackupToolHa
             GraphDatabaseService instance = new HighlyAvailableGraphDatabase( storeDir, config );
             instances.add( instance );
         }
-        
+
         // Really doesn't matter which instance
         representation = createSomeData( instances.get( 1 ) );
     }
-    
+
     @After
     public void after() throws Exception
     {
@@ -86,7 +87,7 @@ public class TestBackupToolHa
         }
         zk.shutdown();
     }
-    
+
     @Test
     public void makeSureBackupCanBePerformedFromCluster() throws Exception
     {
@@ -101,6 +102,17 @@ public class TestBackupToolHa
                 0,
                 runBackupToolFromOtherJvmToGetExitCode( "-incremental",
                         "-from", "ha://localhost:2182", "-to", BACKUP_PATH ) );
+        assertEquals( newRepresentation, DbRepresentation.of( BACKUP_PATH ) );
+    }
+
+    @Test
+    public void performHABackupFromAPI() throws Exception
+    {
+        if ( osIsWindows() ) return;
+        OnlineBackup.from( "ha://localhost:2181" ).full( BACKUP_PATH );
+        assertEquals( representation, DbRepresentation.of( BACKUP_PATH ) );
+        DbRepresentation newRepresentation = createSomeData( instances.get( 2 ) );
+        OnlineBackup.from( "ha://localhost:2181" ).incremental( BACKUP_PATH );
         assertEquals( newRepresentation, DbRepresentation.of( BACKUP_PATH ) );
     }
 }

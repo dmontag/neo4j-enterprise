@@ -21,10 +21,13 @@ package org.neo4j.backup;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.TreeMap;
 
 import org.neo4j.com.MasterUtil;
@@ -34,6 +37,7 @@ import org.neo4j.com.SlaveContext;
 import org.neo4j.com.ToFileStoreWriter;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.helpers.Pair;
+import org.neo4j.helpers.Service;
 import org.neo4j.kernel.AbstractGraphDatabase;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
@@ -42,35 +46,109 @@ import org.neo4j.kernel.impl.util.StringLogger;
 
 public class OnlineBackup
 {
-    private final String hostNameOrIp;
+    private final URI hostURI;
     private final int port;
     private final Map<String, Long> lastCommittedTxs = new TreeMap<String, Long>();
+    public static final String DEFAULT_SCHEME = "single";
 
-    public static OnlineBackup from( String hostNameOrIp, int port )
+    /**
+     *
+     * @param backupURI The URI string of the host to backup from, including the
+     *            scheme as the backup URI resolver service, for example
+     *            <i>ha</i> or <i>single</i>. Default to <i>single</i>.
+     * @param port The port the host to backup from listens for requests. This
+     *            parameter is overridden by the port in the URI if present.
+     * @return An OnlineBackup object bound to the host specified in the
+     *         backupURI, ready to serve backup requests.
+     * @deprecated Use {@link OnlineBackup#from(String)} with the port as part
+     *             of the URI
+     */
+    @Deprecated
+    public static OnlineBackup from( String backupURI, int port )
     {
-        return new OnlineBackup( hostNameOrIp, port );
+        return new OnlineBackup( backupURI, port );
     }
-    
-    public static OnlineBackup from( String hostNameOrIp )
+
+    /**
+     * @param backupURI The URI string of the host to backup from, including the
+     *            scheme as the backup URI resolver service, for example
+     *            <i>ha</i> or <i>single</i>. Default to <i>single</i>.
+     * @return An OnlineBackup object bound to the host specified in the
+     *         backupURI, ready to serve backup requests.
+     */
+    public static OnlineBackup from( String backupURI )
     {
-        return new OnlineBackup( hostNameOrIp, BackupServer.DEFAULT_PORT );
+        return new OnlineBackup( backupURI, BackupServer.DEFAULT_PORT );
     }
-    
-    private OnlineBackup( String hostNameOrIp, int port )
+
+    private OnlineBackup( String backupURI, int port )
     {
-        this.hostNameOrIp = hostNameOrIp;
-        this.port = port;
+        this.hostURI = parseAndResolveURI( backupURI );
+        this.port = hostURI.getPort() != -1 ? hostURI.getPort() : port;
     }
-    
+
+    private URI parseAndResolveURI( String backupURIString )
+            throws IllegalArgumentException
+    {
+        URI backupURI = null;
+        /*
+         * The initial API was not supporting URIs, so we have this
+         * hack for detecting lack of scheme (properly formatted URI)
+         * and add it, otherwise the host will be null.
+         */
+        if ( backupURIString.indexOf( "://" ) == -1 )
+        {
+            backupURIString = DEFAULT_SCHEME + "://" + backupURIString;
+        }
+        try
+        {
+            backupURI = new URI( backupURIString );
+        }
+        catch ( URISyntaxException e )
+        {
+            throw new IllegalArgumentException( e );
+        }
+
+        String module = backupURI.getScheme();
+
+        /*
+         * So, the scheme is considered to be the module name and an attempt at
+         * loading the service is made.
+         */
+        BackupExtensionService service = null;
+        if ( module != null && !DEFAULT_SCHEME.equals( module ) )
+        {
+            try
+            {
+                service = Service.load( BackupExtensionService.class, module );
+            }
+            catch ( NoSuchElementException e )
+            {
+                throw new IllegalArgumentException(
+                        String.format(
+                        "%s was specified as a backup module but it was not found. Please make sure that the implementing service is on the classpath.",
+                        module ) );
+            }
+        }
+        if ( service != null )
+        { // If in here, it means a module was loaded. Use it and substitute the
+          // passed URI
+            backupURI = service.resolve( backupURI );
+        }
+
+        return backupURI;
+    }
+
     public OnlineBackup full( String targetDirectory )
     {
         if ( directoryContainsDb( targetDirectory ) )
         {
             throw new RuntimeException( targetDirectory + " already contains a database" );
         }
-        
+
         //                                                     TODO OMG this is ugly
-        BackupClient client = new BackupClient( hostNameOrIp, port, new NotYetExistingGraphDatabase( targetDirectory ) );
+        BackupClient client = new BackupClient( hostURI.getHost(), port,
+                new NotYetExistingGraphDatabase( targetDirectory ) );
         try
         {
             Response<Void> response = client.fullBackup( new ToFileStoreWriter( targetDirectory ) );
@@ -92,7 +170,7 @@ public class OnlineBackup
         }
         return this;
     }
-    
+
     private boolean directoryContainsDb( String targetDirectory )
     {
         return new File( targetDirectory, "neostore" ).exists();
@@ -102,12 +180,12 @@ public class OnlineBackup
     {
         return port;
     }
-    
+
     public String getHostNameOrIp()
     {
-        return hostNameOrIp;
+        return hostURI.getHost();
     }
-    
+
     public Map<String, Long> getLastCommittedTxs()
     {
         return Collections.unmodifiableMap( lastCommittedTxs );
@@ -117,14 +195,14 @@ public class OnlineBackup
     {
         return new EmbeddedGraphDatabase( targetDirectory );
     }
-    
+
     public OnlineBackup incremental( String targetDirectory )
     {
         if ( !directoryContainsDb( targetDirectory ) )
         {
             throw new RuntimeException( targetDirectory + " doesn't contain a database" );
         }
-        
+
         GraphDatabaseService targetDb = startTemporaryDb( targetDirectory );
         try
         {
@@ -138,7 +216,8 @@ public class OnlineBackup
 
     public OnlineBackup incremental( GraphDatabaseService targetDb )
     {
-        BackupClient client = new BackupClient( hostNameOrIp, port, targetDb );
+        BackupClient client = new BackupClient( hostURI.getHost(), port,
+                targetDb );
         try
         {
             unpackResponse( client.incrementalBackup( slaveContextOf( targetDb ) ), targetDb, MasterUtil.NO_ACTION );
@@ -149,7 +228,7 @@ public class OnlineBackup
         }
         return this;
     }
-    
+
     private void unpackResponse( Response<Void> response, GraphDatabaseService graphDb, TxHandler txHandler )
     {
         try
@@ -162,7 +241,7 @@ public class OnlineBackup
             throw new RuntimeException( "Unable to apply received transactions", e );
         }
     }
-    
+
     private void getLastCommittedTxs( GraphDatabaseService graphDb )
     {
         for ( XaDataSource ds : ((AbstractGraphDatabase) graphDb).getConfig().getTxModule().getXaDataSourceManager().getAllRegisteredDataSources() )
@@ -179,7 +258,7 @@ public class OnlineBackup
         List<Pair<String, Long>> txs = new ArrayList<Pair<String,Long>>();
         for ( XaDataSource ds : dsManager.getAllRegisteredDataSources() )
         {
-            txs.add( Pair.of( ds.getName(), ds.getLastCommittedTxId() ) ); 
+            txs.add( Pair.of( ds.getName(), ds.getLastCommittedTxId() ) );
         }
         return SlaveContext.anonymous( txs.toArray( new Pair[0] ) );
     }
