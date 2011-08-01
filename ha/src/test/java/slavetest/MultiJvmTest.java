@@ -21,6 +21,7 @@ package slavetest;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 import java.rmi.RemoteException;
@@ -34,6 +35,7 @@ import org.junit.After;
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.helpers.collection.MapUtil;
+import org.neo4j.kernel.Config;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.test.ha.StandaloneDatabase;
 
@@ -203,6 +205,8 @@ public class MultiJvmTest extends AbstractHaTest
     @Test
     public void testCancelledCopyWithSuccessfulRetry() throws Exception
     {
+        assumeTrue( !Config.osIsMacOS() );
+        
         createBigMasterStore( 200 );
         startUpMaster( MapUtil.stringMap() );
         AtomicBoolean called = new AtomicBoolean();
