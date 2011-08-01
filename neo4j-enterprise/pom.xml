@@ -18,13 +18,12 @@
   <properties>
     <short-name>neo4j-enterprise</short-name>
     <bundle.namespace>org.neo4j</bundle.namespace>
-    <neo4j.version>1.4</neo4j.version>
+    <neo4j.version>1.4.1-SNAPSHOT</neo4j.version>
   </properties>
 
   <scm>
     <url>https://github.com/neo4j/enterprise/tree/master/neo4j-enterprise</url>
   </scm>
-
 
   <dependencies>
     <dependency>
