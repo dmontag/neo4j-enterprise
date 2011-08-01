@@ -205,8 +205,6 @@ public class MultiJvmTest extends AbstractHaTest
     @Test
     public void testCancelledCopyWithSuccessfulRetry() throws Exception
     {
-        assumeTrue( !Config.osIsMacOS() );
-        
         createBigMasterStore( 200 );
         startUpMaster( MapUtil.stringMap() );
         AtomicBoolean called = new AtomicBoolean();
