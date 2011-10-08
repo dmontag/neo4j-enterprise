@@ -19,6 +19,18 @@
  */
 package org.neo4j.kernel.ha.zookeeper;
 
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.helpers.Pair;
+import org.neo4j.helpers.Triplet;
+import org.neo4j.kernel.AbstractGraphDatabase;
+import org.neo4j.kernel.ha.HaConfig;
+import org.neo4j.kernel.ha.Master;
+import org.neo4j.kernel.ha.MasterClient;
+import org.neo4j.kernel.impl.util.StringLogger;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -28,17 +40,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.Watcher;
-import org.apache.zookeeper.ZooKeeper;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.helpers.Pair;
-import org.neo4j.helpers.Triplet;
-import org.neo4j.kernel.AbstractGraphDatabase;
-import org.neo4j.kernel.ha.Master;
-import org.neo4j.kernel.ha.MasterClient;
-import org.neo4j.kernel.impl.util.StringLogger;
-
 /**
  * Contains basic functionality for a ZooKeeper manager, f.ex. how to get
  * the current master in the cluster.
@@ -46,7 +47,6 @@ import org.neo4j.kernel.impl.util.StringLogger;
 public abstract class AbstractZooKeeperManager implements Watcher
 {
     protected static final String HA_SERVERS_CHILD = "ha-servers";
-    protected static final int SESSION_TIME_OUT = 5000;
 
     private final String servers;
     private final Map<Integer, String> haServersCache = Collections.synchronizedMap(
@@ -57,17 +57,20 @@ public abstract class AbstractZooKeeperManager implements Watcher
     private final StringLogger msgLog;
     private final int maxConcurrentChannelsPerSlave;
     private final int clientReadTimeout;
+    private final int coordinatorTimeout;
 
-    public AbstractZooKeeperManager( String servers, GraphDatabaseService graphDb,
-            int clientReadTimeout, int maxConcurrentChannelsPerSlave )
+    public AbstractZooKeeperManager( GraphDatabaseService graphDb, Map<String, String> config )
     {
-        this.servers = servers;
         this.graphDb = graphDb;
-        this.maxConcurrentChannelsPerSlave = maxConcurrentChannelsPerSlave;
-        this.clientReadTimeout = clientReadTimeout;
+        servers = HaConfig.getCoordinatorsFromConfig( config );
+        maxConcurrentChannelsPerSlave = HaConfig.getMaxConcurrentChannelsPerSlaveFromConfig( config );
+        clientReadTimeout = HaConfig.getClientReadTimeoutFromConfig( config );
+        coordinatorTimeout = HaConfig.getCoordinatorTimeoutFromConfig( config );
         if ( graphDb != null )
         {
-            String storeDir = ((AbstractGraphDatabase) graphDb).getStoreDir();
+            final AbstractGraphDatabase absGraphDb = (AbstractGraphDatabase) graphDb;
+
+            String storeDir = absGraphDb.getStoreDir();
             msgLog = StringLogger.getLogger( storeDir );
         }
         else
@@ -80,7 +83,7 @@ public abstract class AbstractZooKeeperManager implements Watcher
     {
         try
         {
-            return new ZooKeeper( servers, SESSION_TIME_OUT, this );
+            return new ZooKeeper( servers, coordinatorTimeout, this );
         }
         catch ( IOException e )
         {
@@ -96,6 +99,10 @@ public abstract class AbstractZooKeeperManager implements Watcher
     protected GraphDatabaseService getGraphDb()
     {
         return graphDb;
+    }
+
+    protected int getCoordinatorTimeout() {
+        return coordinatorTimeout;
     }
 
     protected Pair<Integer, Integer> parseChild( String child )

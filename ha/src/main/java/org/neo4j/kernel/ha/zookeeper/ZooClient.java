@@ -19,13 +19,6 @@
  */
 package org.neo4j.kernel.ha.zookeeper;
 
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.util.Date;
-import java.util.List;
-
-import javax.management.remote.JMXServiceURL;
-
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -37,11 +30,19 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.AbstractGraphDatabase;
 import org.neo4j.kernel.ha.ConnectionInformation;
+import org.neo4j.kernel.ha.HaConfig;
 import org.neo4j.kernel.ha.Master;
 import org.neo4j.kernel.ha.ResponseReceiver;
 import org.neo4j.kernel.impl.nioneo.store.StoreId;
 import org.neo4j.kernel.impl.transaction.xaframework.TxIdGenerator;
 import org.neo4j.kernel.impl.util.StringLogger;
+
+import javax.management.remote.JMXServiceURL;
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
 public class ZooClient extends AbstractZooKeeperManager
 {
@@ -70,17 +71,16 @@ public class ZooClient extends AbstractZooKeeperManager
     private final int backupPort;
     private final boolean writeLastCommittedTx;
 
-    public ZooClient( String servers, int machineId, RootPathGetter rootPathGetter,
-            ResponseReceiver receiver, String haServer, int backupPort, int clientReadTimeout,
-            int maxConcurrentChannelsPerClient, boolean writeLastCommittedTx, GraphDatabaseService graphDb )
+    public ZooClient( RootPathGetter rootPathGetter, ResponseReceiver receiver,
+                      GraphDatabaseService graphDb, Map<String, String> config )
     {
-        super( servers, graphDb, clientReadTimeout, maxConcurrentChannelsPerClient );
+        super( graphDb, config );
         this.receiver = receiver;
         this.rootPathGetter = rootPathGetter;
-        this.haServer = haServer;
-        this.machineId = machineId;
-        this.backupPort = backupPort;
-        this.writeLastCommittedTx = writeLastCommittedTx;
+        this.haServer = HaConfig.getHaServerFromConfig( config );
+        this.machineId = HaConfig.getMachineIdFromConfig( config );
+        this.backupPort = HaConfig.getBackupPortFromConfig( config );
+        this.writeLastCommittedTx = HaConfig.getSlaveUpdateModeFromConfig( config ).syncWithZooKeeper();
         this.sequenceNr = "not initialized yet";
         String storeDir = ((AbstractGraphDatabase) graphDb).getStoreDir();
         this.msgLog = StringLogger.getLogger( storeDir );
@@ -201,7 +201,7 @@ public class ZooClient extends AbstractZooKeeperManager
         {
             return;
         }
-        if ( shutdown == true )
+        if ( shutdown )
         {
             throw new ZooKeeperException( "ZooKeeper client has been shutdwon" );
         }
@@ -223,13 +223,13 @@ public class ZooClient extends AbstractZooKeeperManager
                 {
                     return;
                 }
-                if ( shutdown == true )
+                if ( shutdown )
                 {
                     throw new ZooKeeperException( "ZooKeeper client has been shutdwon" );
                 }
                 currentTime = System.currentTimeMillis();
             }
-            while ( (currentTime - startTime) < SESSION_TIME_OUT );
+            while ( (currentTime - startTime) < getCoordinatorTimeout() );
 
             if ( keeperState != KeeperState.SyncConnected )
             {
@@ -250,7 +250,7 @@ public class ZooClient extends AbstractZooKeeperManager
         {
             String root = getRoot();
             String path = root + "/" + child;
-            byte[] data = null;
+            byte[] data;
             boolean exists = false;
             try
             {

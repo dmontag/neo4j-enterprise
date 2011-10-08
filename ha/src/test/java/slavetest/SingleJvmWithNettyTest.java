@@ -19,17 +19,6 @@
  */
 package slavetest;
 
-import static java.util.Arrays.asList;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.util.Collection;
-import java.util.concurrent.CountDownLatch;
-
 import org.junit.Test;
 import org.neo4j.com.Client;
 import org.neo4j.com.Protocol;
@@ -54,6 +43,17 @@ import org.neo4j.kernel.ha.zookeeper.Machine;
 import org.neo4j.kernel.impl.nioneo.store.NeoStore;
 import org.neo4j.kernel.impl.util.FileUtils;
 import org.neo4j.kernel.impl.util.StringLogger;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.util.Collection;
+import java.util.concurrent.CountDownLatch;
+
+import static java.util.Arrays.asList;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class SingleJvmWithNettyTest extends SingleJvmTest
 {
@@ -372,6 +372,11 @@ public class SingleJvmWithNettyTest extends SingleJvmTest
         assertEquals( Pair.of( masterTxsBefore.first(), masterTxsBefore.other()+1 ), getTransactionCounts( master ) );
         assertEquals( Pair.of( slaveTxsBefore.first(), slaveTxsBefore.other()+1 ), getTransactionCounts( slave ) );
     }
+
+//    @Test
+//    public void test() {
+//        getMaster()
+//    }
 
     private Pair<Integer, Integer> getTransactionCounts( GraphDatabaseService master )
     {

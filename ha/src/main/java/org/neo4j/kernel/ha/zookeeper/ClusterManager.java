@@ -19,18 +19,19 @@
  */
 package org.neo4j.kernel.ha.zookeeper;
 
-import static org.neo4j.com.Server.DEFAULT_BACKUP_PORT;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.apache.zookeeper.ZooKeeper;
-import org.neo4j.com.Client;
+import org.neo4j.kernel.ha.HaConfig;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static org.neo4j.com.Server.DEFAULT_BACKUP_PORT;
 
 public class ClusterManager extends AbstractZooKeeperManager
 {
@@ -40,8 +41,7 @@ public class ClusterManager extends AbstractZooKeeperManager
     
     public ClusterManager( String zooKeeperServers )
     {
-        super( zooKeeperServers, null, Client.DEFAULT_READ_RESPONSE_TIMEOUT_SECONDS,
-                Client.DEFAULT_MAX_NUMBER_OF_CONCURRENT_CHANNELS_PER_CLIENT );
+        super( null, Collections.singletonMap( HaConfig.CONFIG_KEY_COORDINATORS, zooKeeperServers) );
         this.zooKeeper = instantiateZooKeeper();
     }
     
@@ -54,7 +54,7 @@ public class ClusterManager extends AbstractZooKeeperManager
     public void waitForSyncConnected()
     {
         long startTime = System.currentTimeMillis();
-        while ( System.currentTimeMillis()-startTime < SESSION_TIME_OUT )
+        while ( System.currentTimeMillis()-startTime < HaConfig.DEFAULT_COORDINATOR_TIMEOUT )
         {
             if ( state == KeeperState.SyncConnected )
             {

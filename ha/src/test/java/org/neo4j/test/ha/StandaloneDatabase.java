@@ -36,6 +36,7 @@ import org.neo4j.kernel.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.ha.Broker;
 import org.neo4j.kernel.ha.FakeMasterBroker;
 import org.neo4j.kernel.ha.FakeSlaveBroker;
+import org.neo4j.kernel.ha.HaConfig;
 import org.neo4j.kernel.ha.MasterClient;
 import org.neo4j.kernel.ha.zookeeper.ZooKeeperException;
 import org.neo4j.management.HighAvailability;
@@ -57,9 +58,9 @@ public class StandaloneDatabase
             String[] extraArgs )
     {
         List<String> args = new ArrayList<String>();
-        args.add( HighlyAvailableGraphDatabase.CONFIG_KEY_SERVER );
+        args.add( HaConfig.CONFIG_KEY_SERVER );
         args.add( haServer );
-        args.add( HighlyAvailableGraphDatabase.CONFIG_KEY_COORDINATORS );
+        args.add( HaConfig.CONFIG_KEY_COORDINATORS );
         args.add( zooKeeper.getConnectionString() );
         args.addAll( asList( extraArgs ) );
 
@@ -265,7 +266,7 @@ public class StandaloneDatabase
         final HighlyAvailableGraphDatabase start()
         {
             Map<String, String> params = new HashMap<String, String>();
-            params.put( HighlyAvailableGraphDatabase.CONFIG_KEY_SERVER_ID, Integer.toString( machineId ) );
+            params.put( HaConfig.CONFIG_KEY_SERVER_ID, Integer.toString( machineId ) );
             for ( int i = 0; i < config.length; i += 2 )
             {
                 params.put( config[i], config[i + 1] );

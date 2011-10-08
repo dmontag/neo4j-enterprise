@@ -19,22 +19,22 @@
  */
 package org.neo4j.kernel.ha.zookeeper;
 
-import java.util.Map;
-
-import javax.management.remote.JMXServiceURL;
-
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.AbstractGraphDatabase;
 import org.neo4j.kernel.KernelData;
 import org.neo4j.kernel.ha.AbstractBroker;
 import org.neo4j.kernel.ha.ConnectionInformation;
+import org.neo4j.kernel.ha.HaConfig;
 import org.neo4j.kernel.ha.Master;
 import org.neo4j.kernel.ha.MasterImpl;
 import org.neo4j.kernel.ha.MasterServer;
 import org.neo4j.kernel.ha.ResponseReceiver;
 import org.neo4j.kernel.impl.nioneo.store.StoreId;
 import org.neo4j.management.Neo4jManager;
+
+import javax.management.remote.JMXServiceURL;
+import java.util.Map;
 
 public class ZooKeeperBroker extends AbstractBroker
 {
@@ -43,17 +43,16 @@ public class ZooKeeperBroker extends AbstractBroker
     private final int machineId;
     private final String clusterName;
 
-    public ZooKeeperBroker( GraphDatabaseService graphDb, String clusterName, int machineId,
-            String zooKeeperServers, String haServer, int backupPort, int clientReadTimeout,
-            int maxConcurrentChannelsPerClient, boolean writeLastCommittedTx, ResponseReceiver receiver )
+    public ZooKeeperBroker( GraphDatabaseService graphDb, int machineId, Map<String, String> config, ResponseReceiver receiver )
     {
         super( machineId, graphDb );
-        this.clusterName = clusterName;
+
+        clusterName = HaConfig.getClusterNameFromConfig( config );
+        haServer = HaConfig.getHaServerFromConfig( config );
         this.machineId = machineId;
-        this.haServer = haServer;
+
         String storeDir = ((AbstractGraphDatabase) graphDb).getStoreDir();
-        this.zooClient = new ZooClient( zooKeeperServers, machineId, getRootPathGetter( storeDir ),
-                receiver, haServer, backupPort, clientReadTimeout, maxConcurrentChannelsPerClient, writeLastCommittedTx, graphDb );
+        this.zooClient = new ZooClient( getRootPathGetter( storeDir ), receiver, graphDb, config );
     }
 
     @Override

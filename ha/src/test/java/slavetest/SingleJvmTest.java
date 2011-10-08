@@ -36,6 +36,7 @@ import org.neo4j.kernel.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.ha.Broker;
 import org.neo4j.kernel.ha.FakeMasterBroker;
 import org.neo4j.kernel.ha.FakeSlaveBroker;
+import org.neo4j.kernel.ha.HaConfig;
 import org.neo4j.kernel.ha.MasterImpl;
 
 @Ignore( "SingleJvmWithNettyTest covers this and more" )
@@ -67,9 +68,9 @@ public class SingleJvmTest extends AbstractHaTest
         PlaceHolderGraphDatabaseService placeHolderDb = new PlaceHolderGraphDatabaseService( slavePath.getAbsolutePath() );
         Broker broker = makeSlaveBroker( master, 0, machineId, placeHolderDb );
         Map<String,String> cfg = new HashMap<String, String>(config);
-        cfg.put( HighlyAvailableGraphDatabase.CONFIG_KEY_SERVER_ID, Integer.toString(machineId) );
+        cfg.put( HaConfig.CONFIG_KEY_SERVER_ID, Integer.toString(machineId) );
         cfg.put( Config.KEEP_LOGICAL_LOGS, "true" );
-        cfg.put( HighlyAvailableGraphDatabase.CONFIG_KEY_READ_TIMEOUT, String.valueOf( TEST_READ_TIMEOUT ) );
+        cfg.put( HaConfig.CONFIG_KEY_READ_TIMEOUT, String.valueOf( TEST_READ_TIMEOUT ) );
         HighlyAvailableGraphDatabase db = new HighlyAvailableGraphDatabase(
                 slavePath.getAbsolutePath(), cfg, wrapBrokerAndSetPlaceHolderDb( placeHolderDb, broker ) );
         placeHolderDb.setDb( db );
@@ -97,8 +98,8 @@ public class SingleJvmTest extends AbstractHaTest
     {
         int masterId = 0;
         Map<String, String> config = MapUtil.stringMap( extraConfig,
-                HighlyAvailableGraphDatabase.CONFIG_KEY_SERVER_ID, String.valueOf( masterId ),
-                HighlyAvailableGraphDatabase.CONFIG_KEY_READ_TIMEOUT, String.valueOf( TEST_READ_TIMEOUT ) );
+                HaConfig.CONFIG_KEY_SERVER_ID, String.valueOf( masterId ),
+                HaConfig.CONFIG_KEY_READ_TIMEOUT, String.valueOf( TEST_READ_TIMEOUT ) );
         String path = dbPath( 0 ).getAbsolutePath();
         PlaceHolderGraphDatabaseService placeHolderDb = new PlaceHolderGraphDatabaseService( path );
         Broker broker = makeMasterBroker( masterId, placeHolderDb );

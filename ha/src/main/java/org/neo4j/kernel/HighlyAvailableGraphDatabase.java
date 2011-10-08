@@ -19,32 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static java.lang.Math.max;
-import static java.util.Arrays.asList;
-import static org.neo4j.backup.OnlineBackupExtension.parsePort;
-import static org.neo4j.helpers.collection.MapUtil.stringMap;
-import static org.neo4j.kernel.Config.ENABLE_ONLINE_BACKUP;
-import static org.neo4j.kernel.Config.KEEP_LOGICAL_LOGS;
-import static org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource.LOGICAL_LOG_DEFAULT_NAME;
-import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLog.getHistoryFileNamePattern;
-import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLog.getHistoryLogVersion;
-
-import java.io.File;
-import java.io.FileFilter;
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
-
-import org.neo4j.com.Client;
 import org.neo4j.com.ComException;
 import org.neo4j.com.MasterUtil;
 import org.neo4j.com.Response;
@@ -61,10 +35,10 @@ import org.neo4j.graphdb.event.TransactionEventHandler;
 import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.Pair;
-import org.neo4j.kernel.ha.AsyncZooKeeperLastCommittedTxIdSetter;
 import org.neo4j.kernel.ha.BranchedDataException;
 import org.neo4j.kernel.ha.Broker;
 import org.neo4j.kernel.ha.BrokerFactory;
+import org.neo4j.kernel.ha.HaConfig;
 import org.neo4j.kernel.ha.Master;
 import org.neo4j.kernel.ha.MasterIdGeneratorFactory;
 import org.neo4j.kernel.ha.MasterServer;
@@ -75,12 +49,12 @@ import org.neo4j.kernel.ha.SlaveLockManager.SlaveLockManagerFactory;
 import org.neo4j.kernel.ha.SlaveRelationshipTypeCreator;
 import org.neo4j.kernel.ha.SlaveTxFinishHook;
 import org.neo4j.kernel.ha.SlaveTxIdGenerator.SlaveTxIdGeneratorFactory;
+import org.neo4j.kernel.ha.SlaveUpdateMode;
 import org.neo4j.kernel.ha.TimeUtil;
 import org.neo4j.kernel.ha.ZooKeeperLastCommittedTxIdSetter;
 import org.neo4j.kernel.ha.zookeeper.Machine;
 import org.neo4j.kernel.ha.zookeeper.ZooKeeperBroker;
 import org.neo4j.kernel.ha.zookeeper.ZooKeeperException;
-import org.neo4j.kernel.impl.core.LastCommittedTxIdSetter;
 import org.neo4j.kernel.impl.nioneo.store.NeoStore;
 import org.neo4j.kernel.impl.nioneo.store.StoreId;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
@@ -89,27 +63,29 @@ import org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLog;
 import org.neo4j.kernel.impl.util.FileUtils;
 import org.neo4j.kernel.impl.util.StringLogger;
 
+import java.io.File;
+import java.io.FileFilter;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+
+import static java.lang.Math.max;
+import static org.neo4j.helpers.collection.MapUtil.stringMap;
+import static org.neo4j.kernel.Config.KEEP_LOGICAL_LOGS;
+import static org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource.LOGICAL_LOG_DEFAULT_NAME;
+import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLog.getHistoryFileNamePattern;
+import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLog.getHistoryLogVersion;
+
 public class HighlyAvailableGraphDatabase extends AbstractGraphDatabase
         implements GraphDatabaseService, ResponseReceiver
 {
-    public static final String CONFIG_KEY_OLD_SERVER_ID = "ha.machine_id";
-    public static final String CONFIG_KEY_SERVER_ID = "ha.server_id";
-    
-    public static final String CONFIG_KEY_OLD_COORDINATORS = "ha.zoo_keeper_servers";
-    public static final String CONFIG_KEY_COORDINATORS = "ha.coordinators";
-    
-    public static final String CONFIG_KEY_SERVER = "ha.server";
-    public static final String CONFIG_KEY_CLUSTER_NAME = "ha.cluster_name";
-    public static final String CONFIG_KEY_PULL_INTERVAL = "ha.pull_interval";
-    public static final String CONFIG_KEY_ALLOW_INIT_CLUSTER = "ha.allow_init_cluster";
-    public static final String CONFIG_KEY_MAX_CONCURRENT_CHANNELS_PER_SLAVE = "ha.max_concurrent_channels_per_slave";
-    public static final String CONFIG_KEY_BRANCHED_DATA_POLICY = "ha.branched_data_policy";
-    public static final String CONFIG_KEY_READ_TIMEOUT = "ha.read_timeout";
-    public static final String CONFIG_KEY_SLAVE_COORDINATOR_UPDATE_MODE = "ha.slave_coordinator_update_mode";
-
-    private static final String CONFIG_DEFAULT_HA_CLUSTER_NAME = "neo4j.ha";
-    private static final int CONFIG_DEFAULT_PORT = 6361;
-    
     private final String storeDir;
     private final Map<String, String> config;
     private final BrokerFactory brokerFactory;
@@ -154,10 +130,10 @@ public class HighlyAvailableGraphDatabase extends AbstractGraphDatabase
         this.storeDir = storeDir;
         this.config = config;
         config.put( Config.KEEP_LOGICAL_LOGS, "true" );
-        this.slaveUpdateMode = getSlaveUpdateModeFromConfig( config );
+        this.slaveUpdateMode = HaConfig.getSlaveUpdateModeFromConfig( config );
         this.brokerFactory = brokerFactory != null ? brokerFactory : defaultBrokerFactory(
                 this, config );
-        this.machineId = getMachineIdFromConfig( config );
+        this.machineId = HaConfig.getMachineIdFromConfig( config );
         this.broker = this.brokerFactory.create( this, config );
         this.msgLog = StringLogger.getLogger( storeDir );
         this.branchedDataPolicy = getBranchedDataPolicyFromConfig( config );
@@ -358,123 +334,23 @@ public class HighlyAvailableGraphDatabase extends AbstractGraphDatabase
             @Override
             public Broker create( GraphDatabaseService graphDb, Map<String, String> config )
             {
-                return new ZooKeeperBroker( graphDb,
-                        getClusterNameFromConfig( config ),
-                        machineId,
-                        getCoordinatorsFromConfig( config ),
-                        getHaServerFromConfig( config ),
-                        getBackupPortFromConfig( config ),
-                        getClientReadTimeoutFromConfig( config ),
-                        getMaxConcurrentChannelsPerSlaveFromConfig( config ),
-                        slaveUpdateMode.syncWithZooKeeper,
-                        HighlyAvailableGraphDatabase.this );
+                return new ZooKeeperBroker( graphDb, machineId, config, HighlyAvailableGraphDatabase.this );
             }
         };
-    }
-    
-    private static String getConfigValue( Map<String, String> config, String... oneKeyOutOf/*prioritized in descending order*/ )
-    {
-        String firstFound = null;
-        int foundIndex = -1;
-        for ( int i = 0; i < oneKeyOutOf.length; i++ )
-        {
-            String toTry = oneKeyOutOf[i];
-            String value = config.get( toTry );
-            if ( value != null )
-            {
-                if ( firstFound != null ) throw new RuntimeException( "Multiple configuration values set for the same logical key: " + asList( oneKeyOutOf ) );
-                firstFound = value;
-                foundIndex = i;
-            }
-        }
-        if ( firstFound == null ) throw new RuntimeException( "No configuration set for any of: " + asList( oneKeyOutOf ) );
-        if ( foundIndex > 0 ) System.err.println( "Deprecated configuration key '" + oneKeyOutOf[foundIndex] +
-                "' used instead of the preferred '" + oneKeyOutOf[0] + "'" );
-        return firstFound;
     }
 
     private BranchedDataPolicy getBranchedDataPolicyFromConfig( Map<String, String> config )
     {
-        return config.containsKey( CONFIG_KEY_BRANCHED_DATA_POLICY ) ?
-                BranchedDataPolicy.valueOf( config.get( CONFIG_KEY_BRANCHED_DATA_POLICY ) ) :
+        return config.containsKey( HaConfig.CONFIG_KEY_BRANCHED_DATA_POLICY ) ?
+                BranchedDataPolicy.valueOf( config.get( HaConfig.CONFIG_KEY_BRANCHED_DATA_POLICY ) ) :
                 BranchedDataPolicy.keep_all;
-    }
-    
-    private SlaveUpdateMode getSlaveUpdateModeFromConfig( Map<String, String> config )
-    {
-        return config.containsKey( CONFIG_KEY_SLAVE_COORDINATOR_UPDATE_MODE ) ?
-                SlaveUpdateMode.valueOf( config.get( CONFIG_KEY_SLAVE_COORDINATOR_UPDATE_MODE ) ) :
-                SlaveUpdateMode.async;
-    }
-    
-    private int getClientReadTimeoutFromConfig( Map<String, String> config2 )
-    {
-        String value = config.get( CONFIG_KEY_READ_TIMEOUT );
-        return value != null ? Integer.parseInt( value ) : Client.DEFAULT_MAX_NUMBER_OF_CONCURRENT_CHANNELS_PER_CLIENT;
-    }
-
-    private int getMaxConcurrentChannelsPerSlaveFromConfig( Map<String, String> config )
-    {
-        String value = config.get( CONFIG_KEY_MAX_CONCURRENT_CHANNELS_PER_SLAVE );
-        return value != null ? Integer.parseInt( value ) : Client.DEFAULT_MAX_NUMBER_OF_CONCURRENT_CHANNELS_PER_CLIENT;
-    }
-    /**
-     * @return the port for the backup server if that is enabled, or 0 if disabled.
-     */
-    private static int getBackupPortFromConfig( Map<?, ?> config )
-    {
-        String backupConfig = (String) config.get( ENABLE_ONLINE_BACKUP );
-        Integer port = parsePort( backupConfig );
-        return port != null ? port : 0;
-    }
-
-    private static String getClusterNameFromConfig( Map<?, ?> config )
-    {
-        String clusterName = (String) config.get( CONFIG_KEY_CLUSTER_NAME );
-        if ( clusterName == null ) clusterName = CONFIG_DEFAULT_HA_CLUSTER_NAME;
-        return clusterName;
-    }
-
-    private static String getHaServerFromConfig( Map<?, ?> config )
-    {
-        String haServer = (String) config.get( CONFIG_KEY_SERVER );
-        if ( haServer == null )
-        {
-            InetAddress host = null;
-            try
-            {
-                host = InetAddress.getLocalHost();
-            }
-            catch ( UnknownHostException hostBecomesNull )
-            {
-                // handled by null check
-            }
-            if ( host == null )
-            {
-                throw new IllegalStateException(
-                        "Could not auto configure host name, please supply " + CONFIG_KEY_SERVER );
-            }
-            haServer = host.getHostAddress() + ":" + CONFIG_DEFAULT_PORT;
-        }
-        return haServer;
     }
 
     private static boolean getAllowInitFromConfig( Map<?, ?> config )
     {
-        String allowInit = (String) config.get( CONFIG_KEY_ALLOW_INIT_CLUSTER );
+        String allowInit = (String) config.get( HaConfig.CONFIG_KEY_ALLOW_INIT_CLUSTER );
         if ( allowInit == null ) return true;
         return Boolean.parseBoolean( allowInit );
-    }
-
-    private static String getCoordinatorsFromConfig( Map<String, String> config )
-    {
-        return getConfigValue( config, CONFIG_KEY_COORDINATORS, CONFIG_KEY_OLD_COORDINATORS );
-    }
-
-    private static int getMachineIdFromConfig( Map<String, String> config )
-    {
-        // Fail fast if null
-        return Integer.parseInt( getConfigValue( config, CONFIG_KEY_SERVER_ID, CONFIG_KEY_OLD_SERVER_ID ) );
     }
 
     public Broker getBroker()
@@ -675,7 +551,7 @@ public class HighlyAvailableGraphDatabase extends AbstractGraphDatabase
 
     private void instantiateAutoUpdatePullerIfConfigSaysSo()
     {
-        String pullInterval = this.config.get( CONFIG_KEY_PULL_INTERVAL );
+        String pullInterval = this.config.get( HaConfig.CONFIG_KEY_PULL_INTERVAL );
         if ( pullInterval != null )
         {
             long timeMillis = TimeUtil.parseTimeMillis( pullInterval );
@@ -1042,41 +918,5 @@ public class HighlyAvailableGraphDatabase extends AbstractGraphDatabase
             return file.isDirectory() && file.getName().startsWith( BRANCH_PREFIX );
         }
     }
-    
-    private static enum SlaveUpdateMode
-    {
-        sync( true )
-        {
-            @Override
-            LastCommittedTxIdSetter createUpdater( Broker broker )
-            {
-                return new ZooKeeperLastCommittedTxIdSetter( broker );
-            }
-        },
-        async( true )
-        {
-            @Override
-            LastCommittedTxIdSetter createUpdater( Broker broker )
-            {
-                return new AsyncZooKeeperLastCommittedTxIdSetter( broker );
-            }
-        }/*, TODO for slave-only mode
-        none( false )
-        {
-            @Override
-            LastCommittedTxIdSetter createUpdater( Broker broker )
-            {
-                return CommonFactories.defaultLastCommittedTxIdSetter();
-            }
-        }*/;
-        
-        private final boolean syncWithZooKeeper;
 
-        SlaveUpdateMode( boolean syncWithZooKeeper )
-        {
-            this.syncWithZooKeeper = syncWithZooKeeper;
-        }
-        
-        abstract LastCommittedTxIdSetter createUpdater( Broker broker );
-    }
 }

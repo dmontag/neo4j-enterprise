@@ -25,7 +25,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.neo4j.helpers.collection.MapUtil.map;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
-import static org.neo4j.kernel.HighlyAvailableGraphDatabase.CONFIG_KEY_PULL_INTERVAL;
+import static org.neo4j.kernel.ha.HaConfig.CONFIG_KEY_PULL_INTERVAL;
 
 import java.io.File;
 import java.io.IOException;
