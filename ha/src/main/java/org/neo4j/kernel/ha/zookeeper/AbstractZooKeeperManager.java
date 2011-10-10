@@ -68,9 +68,7 @@ public abstract class AbstractZooKeeperManager implements Watcher
         coordinatorTimeout = HaConfig.getCoordinatorTimeoutFromConfig( config );
         if ( graphDb != null )
         {
-            final AbstractGraphDatabase absGraphDb = (AbstractGraphDatabase) graphDb;
-
-            String storeDir = absGraphDb.getStoreDir();
+            String storeDir = ((AbstractGraphDatabase) graphDb).getStoreDir();
             msgLog = StringLogger.getLogger( storeDir );
         }
         else
