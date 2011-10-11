@@ -29,7 +29,7 @@ import static java.util.Arrays.asList;
 import static org.neo4j.backup.OnlineBackupExtension.parsePort;
 import static org.neo4j.kernel.Config.ENABLE_ONLINE_BACKUP;
 
-public abstract class HaConfig
+public final class HaConfig
 {
     public static final String CONFIG_KEY_OLD_SERVER_ID = "ha.machine_id";
     public static final String CONFIG_KEY_SERVER_ID = "ha.server_id";
@@ -49,6 +49,10 @@ public abstract class HaConfig
     public static final String DEFAULT_HA_CLUSTER_NAME = "neo4j.ha";
     public static final int DEFAULT_HA_PORT = 6361;
     public static final int DEFAULT_COORDINATOR_TIMEOUT = 5000;
+
+    private HaConfig()
+    {
+    }
 
     public static int getMachineIdFromConfig( Map<String, String> config )
     {
